@@ -1,3 +1,7 @@
+// workaround for a compilation issue 
+// https://github.com/microsoft/STL/issues/2335#issuecomment-967306862
+#define _STL_CRT_SECURE_INVALID_PARAMETER(expr) _CRT_SECURE_INVALID_PARAMETER(expr)
+
 #include <GLFW/glfw3.h>
 #include <GL/gl.h>
 
@@ -141,9 +145,17 @@ int main(int argc, char** argv)
     stage = pxr::UsdStage::Open("C:\\Users\\paolo\\Desktop\\solaris\\rubbertoys.usda");
     stage->Load(pxr::SdfPath::AbsoluteRootPath());
 
+#if PXR_VERSION >= 2311
     pxr::UsdLuxDomeLight& domeLight = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myDomeLight"));
+#else
+    pxr::UsdLuxDomeLight domeLight = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myDomeLight"));
+#endif
 
+#if PXR_VERSION >= 2311
     pxr::UsdGeomCube& cube = pxr::UsdGeomCube::Define(stage, pxr::SdfPath("/myCube"));
+#else
+    pxr::UsdGeomCube cube = pxr::UsdGeomCube::Define(stage, pxr::SdfPath("/myCube"));
+#endif
     cube.CreateSizeAttr().Set(1.0);
     auto cubeOp = cube.AddRotateYOp();
 
@@ -152,7 +164,11 @@ int main(int argc, char** argv)
         stage->GetPseudoRoot().GetPath(), excludedPaths));
 
     std::cout << "Available Hydra Delegates:" << std::endl;
+#if PXR_VERSION >= 2311
     auto& renderDelegates = engine->GetRendererPlugins();
+#else
+    auto renderDelegates = engine->GetRendererPlugins();
+#endif
     for (size_t i = 0; i < renderDelegates.size(); ++i)
     {
         std::cout << "[" << (i) << "] "

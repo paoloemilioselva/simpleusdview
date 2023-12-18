@@ -13,105 +13,69 @@ project(
     LANGUAGES CXX C
 )
 
-set(MY_CXX_FLAGS "/MD /O2 /W3" )
-set(MY_LINK_FLAGS "/MANIFEST:NO" )
-
-set(CMAKE_CXX_FLAGS_DEBUG "${MY_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS_RELEASE "${MY_CXX_FLAGS}")
-set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${MY_LINK_FLAGS}" )
-set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${MY_LINK_FLAGS}" )
-
 set(CMAKE_POSITION_INDEPENDENT_CODE ON) # fPIC
 
-# Discover cmake modules.
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake )
-
+# Add OpenGL
 find_package(OpenGL REQUIRED)
 
-# Find python libraries.
-set(Python_ADDITIONAL_VERSIONS 3.11)
-find_package(Python EXACT 3.11 COMPONENTS Interpreter Development)
-include_directories( ${Python_INCLUDE_DIRS} )
-message(STATUS "Python_FOUND:${Python_FOUND}")
-message(STATUS "Python_VERSION:${Python_VERSION}")
-message(STATUS "Python_Development_FOUND:${Python_Development_FOUND}")
-message(STATUS "Python_LIBRARIES:${Python_LIBRARIES}")
-
-set( USD_ROOT "C:\\dev\\usd-23.11" )
-get_filename_component(USD_INCLUDE_DIR ${USD_ROOT}/include ABSOLUTE)
-get_filename_component(USD_LIBRARY_DIR ${USD_ROOT}/lib ABSOLUTE)
-file( STRINGS ${USD_INCLUDE_DIR}/pxr/pxr.h TMP REGEX "^#define PXR_VERSION .*$" )
-string( REGEX MATCHALL "[0-9]+" USD_VERSION ${TMP} )
-message(STATUS "USD_ROOT:${USD_ROOT}")
-message(STATUS "USD_VERSION:${USD_VERSION}")
-message(STATUS "USD_INCLUDE_DIR:${USD_INCLUDE_DIR}")
-message(STATUS "USD_LIB_DIR:${USD_LIB_DIR}")
-set(USD_LIBRARY_MONOLITHIC FALSE)
-set(PXR_LIB_PREFIX "")
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(USD
-    REQUIRED_VARS
-        USD_INCLUDE_DIR
-        USD_LIBRARY_DIR
-    VERSION_VAR
-        USD_VERSION
-)
-
-set(BOOST_FROM_USD 1_78)
-set(TBB_ROOT_DIR ${USD_ROOT} )
-set(BOOST_ROOT "${USD_ROOT}/include/boost-${BOOST_FROM_USD}" )
-find_package(Boost REQUIRED)
-set(boost_version_string "${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION}.${Boost_SUBMINOR_VERSION}")
-message(STATUS "Boost_VERSION:${Boost_VERSION}") 
-include_directories( ${BOOST_ROOT} )
-
-set (_usd_libs
-    usd_usdImagingGL
-    usd_usdImaging
-    usd_usdHydra
-    usd_hdx
-    usd_hdSt
-    usd_hd
-    usd_glf
-    usd_garch
-    usd_pxOsd
-    usd_usdRi
-    usd_usdUI
-    usd_usdShade
-    usd_usdGeom
-    usd_usd
-    usd_usdUtils
-    usd_pcp
-    usd_sdf
-    usd_plug
-    usd_js
-    usd_ar
-    usd_work
-    usd_tf
-    usd_kind
-    usd_arch
-    usd_vt
-    usd_gf
-    usd_hf
-    usd_cameraUtil
-    usd_usdLux
-)
-
-include_directories(
-    ${USD_INCLUDE_DIR}
-)
-
+# Add GLFW
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory( "../glfw" "../glfw" )
 
-find_package(TBB REQUIRED)
+# check target config
+if(NOT TARGET_CONFIG)
+    set( TARGET_CONFIG "usd-23.11")
+endif()
+
+string(REPLACE "-" ";" _t_config ${TARGET_CONFIG})
+list(LENGTH _t_config _t_config_length)
+if(_t_config_length LESS 2)
+    MESSAGE(FATAL_ERROR "Wrong TARGET_CONFIG value " ${TARGET_CONFIG} )
+endif()
+
+list(GET _t_config 0 _target_name )
+
+set( USD_LIBS "" )
+
+if( _target_name MATCHES "houdini" )
+    list(GET _t_config 1 HOUDINI_MAJ_MIN )
+    list(GET _t_config 2 HOUDINI_PATCH )
+    list(GET _t_config 3 HOUDINI_PYTHON_VERSION )
+    set( HOUDINI_VERSION "Houdini ${HOUDINI_MAJ_MIN}.${HOUDINI_PATCH}" )
+    set( HOUDINI_ROOT "C:\\Program Files\\Side Effects Software\\${HOUDINI_VERSION}" )
+
+elseif( _target_name MATCHES "usd" )
+    list(GET _t_config 1 USD_VERSION )
+    set(USD_ROOT "C:\\dev\\usd-${USD_VERSION}" )
+
+else()
+    MESSAGE(FATAL_ERROR "Invalid target " ${_target_name})
+endif()
+
+include(cmake/FindUsd.cmake)
+
+include(cmake/FindTBB.cmake)
+#find_package(TBB REQUIRED)
 
 add_executable( 
     ${TARGET}
     main.cpp
 )
+
+target_compile_options(
+        ${TARGET}
+        PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4273 /Zi /experimental:external /external:W0 /D> 
+        $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:RelWithDebInfo>>:/Ob0 /Od>
+        )
+
+target_link_options(
+        ${TARGET}
+        PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/ignore:4217 /ignore:4049> 
+        )
 
 target_link_directories(
     ${TARGET}
@@ -120,11 +84,11 @@ target_link_directories(
 )
 
 target_link_libraries(
-    ${TARGET}  
+    ${TARGET}
+    PUBLIC
     OpenGL::GL
     glfw
-    ${Python_LIBRARIES}
-    ${_usd_libs}
+    ${USD_LIBS}
 )
 
 install(TARGETS ${TARGET} RUNTIME DESTINATION bin)

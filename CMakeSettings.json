@@ -1,22 +1,26 @@
 ﻿{
   "configurations": [
     {
-      "name": "x64-Release",
+      "name": "x64-Release-usd-23.11",
       "generator": "Ninja",
       "configurationType": "Release",
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "",
+      "cmakeCommandArgs": "-DTARGET_CONFIG=usd-23.11",
       "buildCommandArgs": "",
-      "ctestCommandArgs": "",
-      "variables": [
-        {
-          "name": "CMAKE_BUILD_TYPE",
-          "value": "Release",
-          "type": "STRING"
-        }
-      ]
+      "ctestCommandArgs": ""
+    },
+    {
+      "name": "x64-Release-houdini-20.0.547",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "-DTARGET_CONFIG=houdini-20.0-547-310",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": ""
     }
   ]
 }
