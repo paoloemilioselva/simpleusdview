@@ -8,6 +8,7 @@
 #include <pxr/base/tf/preprocessorUtils.h>
 #include <pxr/usd/usd/stage.h>
 #include <pxr/usd/usdGeom/cube.h>
+#include <pxr/usd/usdGeom/mesh.h>
 #include <pxr/usd/usd/prim.h>
 #include <pxr/usdImaging/usdImagingGL/engine.h>
 #include <pxr/base/gf/camera.h>
@@ -28,8 +29,8 @@
 #define WIDTH 1024
 #define HEIGHT 768
 
-double lookAtDistance = 0.0;
-double yaw = 0.0;
+double lookAtDistance = 6.0;
+double yaw = 7.0;
 double pitch = 0.0;
 double rollX = 0.0;
 double rollY = 0.0;
@@ -40,7 +41,7 @@ float domeExposure = 1.0f;
 int currentDelegate = 0;
 int newDelegate = 0;
 
-bool animate = false;
+bool animate = true;
 
 void error_callback(int error, const char* description)
 {
@@ -112,10 +113,6 @@ int main(int argc, char** argv)
 	}
     glfwSetErrorCallback(error_callback);
 
-
-    //glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    //glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    //glfwWindowHint(GLFW_SAMPLES, 1);
     GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "simplecube", NULL, NULL);
     if (window == NULL)
     {
@@ -124,8 +121,7 @@ int main(int argc, char** argv)
     }
     glfwSetKeyCallback(window, key_callback);
     glfwMakeContextCurrent(window);
-    //gladLoadGL(glfwGetProcAddress);
-    glfwSwapInterval(1); // Enable vsync
+    glfwSwapInterval(1);
 
     pxr::GlfContextCaps::InitInstance();
 
@@ -140,24 +136,42 @@ int main(int argc, char** argv)
 
     pxr::UsdImagingGLRenderParams renderParams;
 
-    pxr::UsdStageRefPtr stage;
-    //stage = pxr::UsdStage::Open("C:/Users/paolo/Desktop/usdassets/Kitchen_set/Kitchen_set.usd");
-    stage = pxr::UsdStage::Open("C:\\Users\\paolo\\Desktop\\solaris\\rubbertoys.usda");
-    stage->Load(pxr::SdfPath::AbsoluteRootPath());
+    pxr::UsdStageRefPtr stage = pxr::UsdStage::CreateInMemory();
 
-#if PXR_VERSION >= 2311
-    pxr::UsdLuxDomeLight& domeLight = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myDomeLight"));
-#else
-    pxr::UsdLuxDomeLight domeLight = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myDomeLight"));
-#endif
+    // cube-mesh
+    pxr::UsdGeomMesh& cubeMesh = pxr::UsdGeomMesh::Define( stage, pxr::SdfPath("/myCubeMesh"));
+    cubeMesh.CreateOrientationAttr().Set( pxr::UsdGeomTokens->leftHanded );
+    cubeMesh.CreateSubdivisionSchemeAttr().Set(pxr::UsdGeomTokens->none);
 
-#if PXR_VERSION >= 2311
-    pxr::UsdGeomCube& cube = pxr::UsdGeomCube::Define(stage, pxr::SdfPath("/myCube"));
-#else
-    pxr::UsdGeomCube cube = pxr::UsdGeomCube::Define(stage, pxr::SdfPath("/myCube"));
-#endif
-    cube.CreateSizeAttr().Set(1.0);
-    auto cubeOp = cube.AddRotateYOp();
+    pxr::VtArray<pxr::GfVec3f> points;
+    points.emplace_back(pxr::GfVec3f(0.5, -0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, -0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(0.5, 0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, 0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, -0.5, -0.5));
+    points.emplace_back(pxr::GfVec3f(0.5, -0.5, -0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, 0.5, -0.5));
+    points.emplace_back(pxr::GfVec3f(0.5, 0.5, -0.5));
+    cubeMesh.CreatePointsAttr().Set(points);
+    pxr::VtArray<pxr::GfVec3f> displayColors;
+    displayColors.emplace_back(pxr::GfVec3f(1,0,1));
+    displayColors.emplace_back(pxr::GfVec3f(0,0,1));
+    displayColors.emplace_back(pxr::GfVec3f(1,1,1));
+    displayColors.emplace_back(pxr::GfVec3f(0,1,1));
+    displayColors.emplace_back(pxr::GfVec3f(0,0,0));
+    displayColors.emplace_back(pxr::GfVec3f(1,0,0));
+    displayColors.emplace_back(pxr::GfVec3f(0,1,0));
+    displayColors.emplace_back(pxr::GfVec3f(1,1,0));
+    pxr::UsdAttribute& displayColorsAttr = cubeMesh.CreateDisplayColorAttr();
+    displayColorsAttr.Set(displayColors);
+    pxr::UsdGeomPrimvar displayColorsPrimvar(displayColorsAttr);
+    displayColorsPrimvar.SetInterpolation( pxr::UsdGeomTokens->vertex );
+
+    pxr::VtArray<int> faceVertexCounts = { 4, 4, 4, 4, 4, 4 };
+    cubeMesh.CreateFaceVertexCountsAttr().Set(faceVertexCounts);
+    pxr::VtArray<int> faceVertexIndices = { 0, 1, 3, 2, 4, 5, 7, 6, 6, 7, 2, 3, 5, 4, 1, 0, 5, 0, 2, 7, 1, 4, 6, 3 };
+    cubeMesh.CreateFaceVertexIndicesAttr().Set(faceVertexIndices);
+    auto cubeMeshOp = cubeMesh.AddRotateYOp();
 
     pxr::SdfPathVector excludedPaths;
     engine.reset(new pxr::UsdImagingGLEngine(
@@ -179,6 +193,8 @@ int main(int argc, char** argv)
 
     int frame = 0;
 
+    pxr::GfVec4f clearColor(0.18f, 0.18f, 0.18f, 1.0f);
+
     while (!glfwWindowShouldClose(window))
     {
         if(animate)
@@ -194,9 +210,9 @@ int main(int argc, char** argv)
             engine->SetRendererPlugin(renderDelegates[currentDelegate]);
         }
 
-        domeLight.CreateIntensityAttr().Set(domeExposure);
-        domeLight.CreateExposureAttr().Set(domeExposure);
-        cubeOp.Set(float(frame));
+        // set cube rotation
+        //
+        cubeMeshOp.Set(float(frame));
 
         // get display size (inner display buffer)
         //
@@ -227,7 +243,7 @@ int main(int argc, char** argv)
         projectionMatrix = frustum.ComputeProjectionMatrix();
         viewMatrix = frustum.ComputeViewMatrix();
 
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -253,8 +269,8 @@ int main(int argc, char** argv)
 
             // update render params
             renderParams.frame = 1;
-            renderParams.enableLighting = true;
-            renderParams.enableSceneLights = true;
+            renderParams.enableLighting = false;
+            renderParams.enableSceneLights = false;
             renderParams.enableSceneMaterials = false;
             renderParams.showProxy = true;
             renderParams.showRender = false;
@@ -263,12 +279,10 @@ int main(int argc, char** argv)
             renderParams.highlight = true;
             renderParams.enableUsdDrawModes = true;
             renderParams.drawMode = pxr::UsdImagingGLDrawMode::DRAW_SHADED_SMOOTH;
-            renderParams.gammaCorrectColors = false;
-            renderParams.clearColor = pxr::GfVec4f(0.1f, 0.1f, 0.1f, 1.0f);
+            renderParams.gammaCorrectColors = true;
+            renderParams.clearColor = clearColor;
             renderParams.enableIdRender = false;
             renderParams.enableSampleAlphaToCoverage = false;
-            // From Pixar's doc, complexity values are 
-            // low=1.0, medium=1.1, high=1.2, veryhigh=1.3
             renderParams.complexity = 1.0f;
 
             // render all paths from root

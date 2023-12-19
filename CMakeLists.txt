@@ -59,6 +59,8 @@ include(cmake/FindUsd.cmake)
 include(cmake/FindTBB.cmake)
 #find_package(TBB REQUIRED)
 
+configure_file( run_simpleusdview.bat run_simpleusdview.bat )
+
 add_executable( 
     ${TARGET}
     main.cpp
@@ -92,4 +94,5 @@ target_link_libraries(
 )
 
 install(TARGETS ${TARGET} RUNTIME DESTINATION bin)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/run_simpleusdview.bat DESTINATION bin)
 
