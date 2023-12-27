@@ -54,3 +54,8 @@ Build the project via right-click on the `CMakeLists.txt` file and selecting `Bu
 Once installed, you can go in the `out/install/` folder, and the configuration subfolder you installed, and launch `run_simpleusdview.bat`.
 
 The batch-file is setting up all environments needed to launch your standalone app.
+
+References
+----------
+
+HDRI downloaded from: https://polyhaven.com/a/meadow_2

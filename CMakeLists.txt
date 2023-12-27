@@ -95,4 +95,5 @@ target_link_libraries(
 
 install(TARGETS ${TARGET} RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/run_simpleusdview.bat DESTINATION bin)
+install(FILES ${CMAKE_SOURCE_DIR}/meadow_2_2k.exr DESTINATION bin)
 

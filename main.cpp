@@ -177,6 +177,9 @@ int main(int argc, char** argv)
     engine.reset(new pxr::UsdImagingGLEngine(
         stage->GetPseudoRoot().GetPath(), excludedPaths));
 
+    pxr::UsdLuxDomeLight& ibl = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myIbl"));
+    ibl.CreateTextureFileAttr().Set(pxr::SdfAssetPath("./meadow_2_2k.exr"));
+
     std::cout << "Available Hydra Delegates:" << std::endl;
 #if PXR_VERSION >= 2311
     auto& renderDelegates = engine->GetRendererPlugins();
@@ -235,13 +238,16 @@ int main(int argc, char** argv)
 
         camera.SetTransform(cameraTransform);
         frustum = camera.GetFrustum();
-        double fovy = 30.0;
+        double fovy = 18.0;
         double znear = 0.1;
         double zfar = 10000.0;
         const double aspectRatio = double(display_w) / double(display_h);
         frustum.SetPerspective(fovy, aspectRatio, znear, zfar);
         projectionMatrix = frustum.ComputeProjectionMatrix();
         viewMatrix = frustum.ComputeViewMatrix();
+
+        //if (!pxr::UsdImagingGLEngine::IsColorCorrectionCapable())
+        //    glEnable(GL_FRAMEBUFFER_SRGB_EXT);
 
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glEnable(GL_DEPTH_TEST);
@@ -268,10 +274,10 @@ int main(int argc, char** argv)
             engine->SetEnablePresentation(true);
 
             // update render params
-            renderParams.frame = 1;
-            renderParams.enableLighting = false;
-            renderParams.enableSceneLights = false;
-            renderParams.enableSceneMaterials = false;
+            renderParams.frame = frame;
+            renderParams.enableLighting = true;
+            renderParams.enableSceneLights = true;
+            renderParams.enableSceneMaterials = true;
             renderParams.showProxy = true;
             renderParams.showRender = false;
             renderParams.showGuides = false;
