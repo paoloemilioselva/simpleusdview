@@ -41,7 +41,14 @@ float domeExposure = 1.0f;
 int currentDelegate = 0;
 int newDelegate = 0;
 
+std::string currentFilename = "";
+std::string newFilename = "";
+
 bool animate = true;
+
+int totalCubes = 0;
+
+bool fullscreen = false;
 
 void error_callback(int error, const char* description)
 {
@@ -102,6 +109,67 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
     {
         animate = !animate;
     }
+    else if (key == GLFW_KEY_F && action == GLFW_PRESS)
+    {
+        fullscreen = !fullscreen;
+
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+
+        if (fullscreen)
+            glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+        else
+            glfwSetWindowMonitor(window, NULL, WIDTH/2.0, HEIGHT/2.0, WIDTH, HEIGHT, 0);
+    }
+}
+
+void drop_callback(GLFWwindow* window, int count, const char** paths)
+{
+    int i;
+    for (i = 0; i < count; i++)
+    {
+        // only first one, and it replaces current one
+        newFilename = std::string(paths[i]);
+        break;
+    }
+}
+
+void AddMeshCube(pxr::UsdStageRefPtr i_stage, pxr::SdfPath& i_path, pxr::GfVec3d& i_pos)
+{
+    pxr::UsdGeomMesh& cubeMesh = pxr::UsdGeomMesh::Define(i_stage, i_path);
+    cubeMesh.CreateOrientationAttr().Set(pxr::UsdGeomTokens->leftHanded);
+    cubeMesh.CreateSubdivisionSchemeAttr().Set(pxr::UsdGeomTokens->none);
+
+    pxr::VtArray<pxr::GfVec3f> points;
+    points.emplace_back(pxr::GfVec3f(0.5, -0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, -0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(0.5, 0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, 0.5, 0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, -0.5, -0.5));
+    points.emplace_back(pxr::GfVec3f(0.5, -0.5, -0.5));
+    points.emplace_back(pxr::GfVec3f(-0.5, 0.5, -0.5));
+    points.emplace_back(pxr::GfVec3f(0.5, 0.5, -0.5));
+    cubeMesh.CreatePointsAttr().Set(points);
+    pxr::VtArray<pxr::GfVec3f> displayColors;
+    displayColors.emplace_back(pxr::GfVec3f(1, 0, 1));
+    displayColors.emplace_back(pxr::GfVec3f(0, 0, 1));
+    displayColors.emplace_back(pxr::GfVec3f(1, 1, 1));
+    displayColors.emplace_back(pxr::GfVec3f(0, 1, 1));
+    displayColors.emplace_back(pxr::GfVec3f(0, 0, 0));
+    displayColors.emplace_back(pxr::GfVec3f(1, 0, 0));
+    displayColors.emplace_back(pxr::GfVec3f(0, 1, 0));
+    displayColors.emplace_back(pxr::GfVec3f(1, 1, 0));
+    pxr::UsdAttribute& displayColorsAttr = cubeMesh.CreateDisplayColorAttr();
+    displayColorsAttr.Set(displayColors);
+    pxr::UsdGeomPrimvar displayColorsPrimvar(displayColorsAttr);
+    displayColorsPrimvar.SetInterpolation(pxr::UsdGeomTokens->vertex);
+
+    pxr::VtArray<int> faceVertexCounts = { 4, 4, 4, 4, 4, 4 };
+    cubeMesh.CreateFaceVertexCountsAttr().Set(faceVertexCounts);
+    pxr::VtArray<int> faceVertexIndices = { 0, 1, 3, 2, 4, 5, 7, 6, 6, 7, 2, 3, 5, 4, 1, 0, 5, 0, 2, 7, 1, 4, 6, 3 };
+    cubeMesh.CreateFaceVertexIndicesAttr().Set(faceVertexIndices);
+    
+    cubeMesh.AddTranslateOp().Set(i_pos);
 }
 
 int main(int argc, char** argv)
@@ -120,6 +188,7 @@ int main(int argc, char** argv)
         return 1;
     }
     glfwSetKeyCallback(window, key_callback);
+    glfwSetDropCallback(window, drop_callback);
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
@@ -139,39 +208,12 @@ int main(int argc, char** argv)
     pxr::UsdStageRefPtr stage = pxr::UsdStage::CreateInMemory();
 
     // cube-mesh
-    pxr::UsdGeomMesh& cubeMesh = pxr::UsdGeomMesh::Define( stage, pxr::SdfPath("/myCubeMesh"));
-    cubeMesh.CreateOrientationAttr().Set( pxr::UsdGeomTokens->leftHanded );
-    cubeMesh.CreateSubdivisionSchemeAttr().Set(pxr::UsdGeomTokens->none);
-
-    pxr::VtArray<pxr::GfVec3f> points;
-    points.emplace_back(pxr::GfVec3f(0.5, -0.5, 0.5));
-    points.emplace_back(pxr::GfVec3f(-0.5, -0.5, 0.5));
-    points.emplace_back(pxr::GfVec3f(0.5, 0.5, 0.5));
-    points.emplace_back(pxr::GfVec3f(-0.5, 0.5, 0.5));
-    points.emplace_back(pxr::GfVec3f(-0.5, -0.5, -0.5));
-    points.emplace_back(pxr::GfVec3f(0.5, -0.5, -0.5));
-    points.emplace_back(pxr::GfVec3f(-0.5, 0.5, -0.5));
-    points.emplace_back(pxr::GfVec3f(0.5, 0.5, -0.5));
-    cubeMesh.CreatePointsAttr().Set(points);
-    pxr::VtArray<pxr::GfVec3f> displayColors;
-    displayColors.emplace_back(pxr::GfVec3f(1,0,1));
-    displayColors.emplace_back(pxr::GfVec3f(0,0,1));
-    displayColors.emplace_back(pxr::GfVec3f(1,1,1));
-    displayColors.emplace_back(pxr::GfVec3f(0,1,1));
-    displayColors.emplace_back(pxr::GfVec3f(0,0,0));
-    displayColors.emplace_back(pxr::GfVec3f(1,0,0));
-    displayColors.emplace_back(pxr::GfVec3f(0,1,0));
-    displayColors.emplace_back(pxr::GfVec3f(1,1,0));
-    pxr::UsdAttribute& displayColorsAttr = cubeMesh.CreateDisplayColorAttr();
-    displayColorsAttr.Set(displayColors);
-    pxr::UsdGeomPrimvar displayColorsPrimvar(displayColorsAttr);
-    displayColorsPrimvar.SetInterpolation( pxr::UsdGeomTokens->vertex );
-
-    pxr::VtArray<int> faceVertexCounts = { 4, 4, 4, 4, 4, 4 };
-    cubeMesh.CreateFaceVertexCountsAttr().Set(faceVertexCounts);
-    pxr::VtArray<int> faceVertexIndices = { 0, 1, 3, 2, 4, 5, 7, 6, 6, 7, 2, 3, 5, 4, 1, 0, 5, 0, 2, 7, 1, 4, 6, 3 };
-    cubeMesh.CreateFaceVertexIndicesAttr().Set(faceVertexIndices);
-    auto cubeMeshOp = cubeMesh.AddRotateYOp();
+    for(int cx=0;cx<1;++cx)
+        for (int cy = 0; cy < 1; ++cy)
+        {
+            AddMeshCube(stage, pxr::SdfPath("/myCubeMesh_" + std::to_string(totalCubes)), pxr::GfVec3d(cx * 2.5, 0.0, cy * 2.5));
+            totalCubes++;
+        }
 
     pxr::SdfPathVector excludedPaths;
     engine.reset(new pxr::UsdImagingGLEngine(
@@ -198,6 +240,23 @@ int main(int argc, char** argv)
 
     pxr::GfVec4f clearColor(0.18f, 0.18f, 0.18f, 1.0f);
 
+    pxr::GfVec2f joystickZeroLeft;
+    pxr::GfVec2f joystickZeroRight;
+    float joystickTriggerLeft = 0.0f;
+    float joystickTriggerRight = 0.0f;
+    if (glfwJoystickIsGamepad(GLFW_JOYSTICK_1))
+    {
+        GLFWgamepadstate state;
+        if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
+        {
+            std::cout << "Joystick/Gamepad found: " << glfwGetGamepadName(GLFW_JOYSTICK_1) << std::endl;
+            joystickZeroLeft = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+            joystickZeroRight = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+            joystickTriggerLeft = state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER];
+            joystickTriggerRight = state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER];
+        }
+    }
+
     while (!glfwWindowShouldClose(window))
     {
         if(animate)
@@ -207,6 +266,63 @@ int main(int argc, char** argv)
 
         glfwPollEvents();
 
+        if (glfwJoystickIsGamepad(GLFW_JOYSTICK_1))
+        {
+            GLFWgamepadstate state;
+            if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
+            {
+                pxr::GfVec2f stickLeft = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+                pxr::GfVec2f stickRight = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+
+                if ((joystickZeroLeft - stickLeft).GetLength() > 0.08)
+                {
+                    pxr::GfVec3d camDir = cameraTransform.ExtractTranslation() - cameraPivot;
+                    camDir[1] = 0.0;
+                    camDir.Normalize();
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[1] * camDir[0], 0.0, cameraPivot[2] + stickLeft[1] * camDir[2]);
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[0] * camDir[2], 0.0, cameraPivot[2] + stickLeft[0] * (-camDir[0]));
+                }
+                if ((joystickZeroRight - stickRight).GetLength() > 0.08)
+                {
+                    pitch += stickRight[0];
+                    yaw += stickRight[1];
+                }
+
+                if (abs(joystickTriggerLeft - state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]) > 0.05)
+                    lookAtDistance -= (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] + 1.0);
+                if (abs(joystickTriggerRight - state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]) > 0.05)
+                    lookAtDistance += (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] + 1.0);
+
+                if (state.buttons[GLFW_GAMEPAD_BUTTON_A])
+                    newDelegate = 0;
+                if (state.buttons[GLFW_GAMEPAD_BUTTON_B])
+                    newDelegate = 1;
+                if (state.buttons[GLFW_GAMEPAD_BUTTON_X])
+                    newDelegate = 2;
+                if (state.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER])
+                {
+                    AddMeshCube(stage, pxr::SdfPath("/myCubeMesh_" + std::to_string(totalCubes)), cameraPivot);
+                    totalCubes++;
+                }
+                if (state.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER])
+                {
+                    pxr::UsdLuxDomeLight& ibl = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myIbl"));
+                    ibl.CreateTextureFileAttr().Set(pxr::SdfAssetPath("./meadow_2_2k.exr"));
+                }
+            }
+        }
+
+        if (currentFilename != newFilename)
+        {
+            currentFilename = newFilename;
+            stage = pxr::UsdStage::Open(currentFilename);
+            stage->Load(pxr::SdfPath::AbsoluteRootPath());
+
+            pxr::SdfPathVector excludedPaths;
+            engine.reset(new pxr::UsdImagingGLEngine(
+                stage->GetPseudoRoot().GetPath(), excludedPaths));
+        }
+
         if (newDelegate != currentDelegate)
         {
             currentDelegate = newDelegate;
@@ -215,7 +331,7 @@ int main(int argc, char** argv)
 
         // set cube rotation
         //
-        cubeMeshOp.Set(float(frame));
+        //cubeMeshOp.Set(float(frame));
 
         // get display size (inner display buffer)
         //
