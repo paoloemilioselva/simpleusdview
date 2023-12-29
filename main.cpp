@@ -50,6 +50,8 @@ int totalCubes = 0;
 
 bool fullscreen = false;
 
+int recentButton = GLFW_GAMEPAD_BUTTON_LAST;
+
 void error_callback(int error, const char* description)
 {
     fprintf(stderr, "Error: %s\n", description);
@@ -271,6 +273,8 @@ int main(int argc, char** argv)
             GLFWgamepadstate state;
             if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
             {
+                float distanceMultiplier = 1.0f + lookAtDistance/100.0f;
+
                 pxr::GfVec2f stickLeft = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
                 pxr::GfVec2f stickRight = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
 
@@ -279,8 +283,8 @@ int main(int argc, char** argv)
                     pxr::GfVec3d camDir = cameraTransform.ExtractTranslation() - cameraPivot;
                     camDir[1] = 0.0;
                     camDir.Normalize();
-                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[1] * camDir[0], 0.0, cameraPivot[2] + stickLeft[1] * camDir[2]);
-                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[0] * camDir[2], 0.0, cameraPivot[2] + stickLeft[0] * (-camDir[0]));
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[1] * camDir[0] * distanceMultiplier, 0.0, cameraPivot[2] + stickLeft[1] * camDir[2] * distanceMultiplier);
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[0] * camDir[2] * distanceMultiplier, 0.0, cameraPivot[2] + stickLeft[0] * (-camDir[0]) * distanceMultiplier);
                 }
                 if ((joystickZeroRight - stickRight).GetLength() > 0.08)
                 {
@@ -289,26 +293,44 @@ int main(int argc, char** argv)
                 }
 
                 if (abs(joystickTriggerLeft - state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]) > 0.05)
-                    lookAtDistance -= (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] + 1.0);
+                    lookAtDistance -= (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] + 1.0) * distanceMultiplier;
                 if (abs(joystickTriggerRight - state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]) > 0.05)
-                    lookAtDistance += (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] + 1.0);
+                    lookAtDistance += (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] + 1.0) * distanceMultiplier;
 
-                if (state.buttons[GLFW_GAMEPAD_BUTTON_A])
+// marco to check if a gamepad button is pressed
+#define GAMEPAD_BUTTON_PRESSED(btn) state.buttons[btn] == GLFW_PRESS
+// macro to check if a gamepad button has been pressed once
+#define GAMEPAD_BUTTON_PRESSED_ONCE(btn) state.buttons[btn] == GLFW_PRESS && recentButton != btn
+
+                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_A))
                     newDelegate = 0;
-                if (state.buttons[GLFW_GAMEPAD_BUTTON_B])
+                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_B))
                     newDelegate = 1;
-                if (state.buttons[GLFW_GAMEPAD_BUTTON_X])
+                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_X))
                     newDelegate = 2;
-                if (state.buttons[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER])
+                if (GAMEPAD_BUTTON_PRESSED(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER))
                 {
                     AddMeshCube(stage, pxr::SdfPath("/myCubeMesh_" + std::to_string(totalCubes)), cameraPivot);
                     totalCubes++;
                 }
-                if (state.buttons[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER])
+                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER))
                 {
                     pxr::UsdLuxDomeLight& ibl = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myIbl"));
                     ibl.CreateTextureFileAttr().Set(pxr::SdfAssetPath("./meadow_2_2k.exr"));
                 }
+                // set recent button
+                for (int bi = 0; bi < 15; ++bi)
+                {
+                    recentButton = GLFW_GAMEPAD_BUTTON_LAST;
+                    if (state.buttons[bi] == GLFW_PRESS)
+                    {
+                        recentButton = bi;
+                        break;
+                    }
+                }
+#undef GAMEPAD_BUTTON_PRESSED
+#undef GAMEPAD_BUTTON_PRESSED_ONCE
+
             }
         }
 
@@ -355,8 +377,8 @@ int main(int argc, char** argv)
         camera.SetTransform(cameraTransform);
         frustum = camera.GetFrustum();
         double fovy = 18.0;
-        double znear = 0.1;
-        double zfar = 10000.0;
+        double znear = 0.5;
+        double zfar = 100000.0;
         const double aspectRatio = double(display_w) / double(display_h);
         frustum.SetPerspective(fovy, aspectRatio, znear, zfar);
         projectionMatrix = frustum.ComputeProjectionMatrix();
@@ -409,6 +431,60 @@ int main(int argc, char** argv)
 
             // render all paths from root
             engine->Render(stage->GetPseudoRoot(), renderParams);
+        }
+        glPopMatrix();
+
+        pxr::GfVec2d halfSize(1.0 / display_w, 1.0 / display_h);
+        pxr::GfVec2d screenPoint(2.0 * ((display_w/2.0) / display_w) - 1.0, 2.0 * (1.0 - (display_h/2.0) / display_h) - 1.0);
+
+        // Compute pick frustum.
+        auto pickFrustum = frustum.ComputeNarrowedFrustum(screenPoint, halfSize);
+        auto pickView = pickFrustum.ComputeViewMatrix();
+        auto pickProj = pickFrustum.ComputeProjectionMatrix();
+
+        pxr::SdfPath outHitPrimPath;
+        pxr::GfVec3d selectionHitPoint;
+        pxr::GfVec3d selectionHitNormal;
+
+        if (engine->TestIntersection(
+            pickView,
+            pickProj,
+            stage->GetPseudoRoot(),
+            renderParams,
+            &selectionHitPoint,
+            &selectionHitNormal,
+            &outHitPrimPath))
+        {
+            engine->SetSelected({ outHitPrimPath });
+        }
+        else
+        {
+            engine->ClearSelected();
+        }
+
+        // draw cross
+        glDisable(GL_LIGHTING);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glEnable(GL_LINE_SMOOTH);
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glLineWidth(2.0f);
+        glPushMatrix();
+        {
+            glViewport(0, 0, display_w, display_h);
+            glMatrixMode(GL_PROJECTION);
+            glLoadIdentity();
+            glMatrixMode(GL_MODELVIEW);
+            glLoadIdentity();
+            glBegin(GL_LINES);
+            glColor3f(1.0f, 1.0f, 1.0f);
+            glVertex3f(-0.1, 0.0, 0.0);
+            glVertex3f(0.1, 0.0, 0.0);
+            glVertex3f(0.0, -0.1, 0.0);
+            glVertex3f(0.0, 0.1, 0.0);
+            glEnd();
+
         }
         glPopMatrix();
 
