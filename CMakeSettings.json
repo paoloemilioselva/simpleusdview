@@ -12,6 +12,17 @@
       "ctestCommandArgs": ""
     },
     {
+      "name": "x64-Release-usd-23.11-embedded",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "-DTARGET_CONFIG=usd-23.11-embedded",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": ""
+    },
+    {
       "name": "x64-Release-houdini-20.0.547",
       "generator": "Ninja",
       "configurationType": "Release",

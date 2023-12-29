@@ -38,6 +38,7 @@ endif()
 list(GET _t_config 0 _target_name )
 
 set( USD_LIBS "" )
+set( USD_EMBEDDED FALSE )
 
 if( _target_name MATCHES "houdini" )
     list(GET _t_config 1 HOUDINI_MAJ_MIN )
@@ -49,6 +50,13 @@ if( _target_name MATCHES "houdini" )
 elseif( _target_name MATCHES "usd" )
     list(GET _t_config 1 USD_VERSION )
     set(USD_ROOT "C:\\dev\\usd-${USD_VERSION}" )
+    set(USD_ROOT_FOR_BATCH ${USD_ROOT})
+    if( USD_EMBEDDED )
+        set(USD_ROOT_FOR_BATCH .\\usd-${USD_VERSION})
+    endif()
+    if(_t_config_length EQUAL 3)
+        set( USD_EMBEDDED TRUE )
+    endif()
 
 else()
     MESSAGE(FATAL_ERROR "Invalid target " ${_target_name})
@@ -93,7 +101,15 @@ target_link_libraries(
     ${USD_LIBS}
 )
 
+if( USD_EMBEDDED )
+    message(STATUS "USD EMBEDDED") 
+    install(DIRECTORY ${USD_ROOT}/bin DESTINATION bin/usd-${USD_VERSION})
+    install(DIRECTORY ${USD_ROOT}/include DESTINATION bin/usd-${USD_VERSION})
+    install(DIRECTORY ${USD_ROOT}/lib DESTINATION bin/usd-${USD_VERSION})
+    install(DIRECTORY ${USD_ROOT}/plugin DESTINATION bin/usd-${USD_VERSION})
+    install(DIRECTORY ${USD_ROOT}/share DESTINATION bin/usd-${USD_VERSION})
+endif()
+
 install(TARGETS ${TARGET} RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/run_simpleusdview.bat DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/meadow_2_2k.exr DESTINATION bin)
-
