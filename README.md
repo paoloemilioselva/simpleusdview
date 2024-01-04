@@ -16,7 +16,7 @@ Dependencies
 - `VisualStudio 2022`
 - `GLFW` from github ( https://github.com/glfw/glfw )
 
-And for the 2 configurations:
+And for the 3 configurations:
 
 Pixar's OpenUSD configuration:
 - `OpenUSD 23.11` from github ( https://github.com/PixarAnimationStudios/OpenUSD )
@@ -27,6 +27,10 @@ Pixar's OpenUSD configuration:
     - `pip install pyopengl`
   - OPTIONAL:
     - `Renderman 25.2` (non-commercial) (if you want it as renderer in your standalone app)
+
+Pixar's OpenUSD configuration embedded:
+- Just like the previous configuration, but this will also install all the dependencies to use a localised openusd build for a redistributable app.
+- Note this will create about 300MB of data in the output install bin folder.
 
 SideFX's Houdini/Solaris HUSD configuration:
 - `Houdini-20.0.547` (Education License is fine)

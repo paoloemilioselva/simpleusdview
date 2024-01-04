@@ -9,6 +9,9 @@
 #include <pxr/usd/usd/stage.h>
 #include <pxr/usd/usdGeom/cube.h>
 #include <pxr/usd/usdGeom/mesh.h>
+#include <pxr/usd/usdGeom/xform.h>
+#include <pxr/usd/usdGeom/xformCommonAPI.h>
+#include <pxr/usd/usdLux/rectLight.h>
 #include <pxr/usd/usd/prim.h>
 #include <pxr/usdImaging/usdImagingGL/engine.h>
 #include <pxr/base/gf/camera.h>
@@ -25,6 +28,8 @@
 
 #include <iostream>
 #include <cstdlib>
+
+#include "font.h"
 
 #define WIDTH 1024
 #define HEIGHT 768
@@ -51,6 +56,17 @@ int totalCubes = 0;
 bool fullscreen = false;
 
 int recentButton = GLFW_GAMEPAD_BUTTON_LAST;
+
+bool showHelp = true;
+bool highlight = true;
+
+float eyesHeight = 0.0f;
+float focalLength = 30.f;
+
+float positionMultiplier = 5.0f;
+float rotationMultiplier = 0.2f;
+float heightMultiplier = 2.0f;
+float distanceMultiplier = 3.0f;
 
 void error_callback(int error, const char* description)
 {
@@ -87,6 +103,40 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
     {
         pitch += 0.5;
     }
+
+    else if (key == GLFW_KEY_6 && action == GLFW_PRESS)
+    {
+        positionMultiplier += 0.1f;
+    }
+    else if (key == GLFW_KEY_Y && action == GLFW_PRESS)
+    {
+        positionMultiplier -= 0.1f;
+    }
+    else if (key == GLFW_KEY_7 && action == GLFW_PRESS)
+    {
+        rotationMultiplier += 0.1f;
+    }
+    else if (key == GLFW_KEY_U && action == GLFW_PRESS)
+    {
+        rotationMultiplier -= 0.1f;
+    }
+    else if (key == GLFW_KEY_8 && action == GLFW_PRESS)
+    {
+        heightMultiplier += 0.1f;
+    }
+    else if (key == GLFW_KEY_I && action == GLFW_PRESS)
+    {
+        heightMultiplier -= 0.1f;
+    }
+    else if (key == GLFW_KEY_9 && action == GLFW_PRESS)
+    {
+        distanceMultiplier += 0.1f;
+    }
+    else if (key == GLFW_KEY_O && action == GLFW_PRESS)
+    {
+        distanceMultiplier -= 0.1f;
+    }
+
     else if (key == GLFW_KEY_0 && action == GLFW_PRESS)
     {
         newDelegate = 0;
@@ -121,7 +171,15 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
         if (fullscreen)
             glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
         else
-            glfwSetWindowMonitor(window, NULL, WIDTH/2.0, HEIGHT/2.0, WIDTH, HEIGHT, 0);
+            glfwSetWindowMonitor(window, NULL, WIDTH / 2.0, HEIGHT / 2.0, WIDTH, HEIGHT, 0);
+    }
+    else if (key == GLFW_KEY_H && action == GLFW_PRESS)
+    {
+        showHelp = !showHelp;
+    }
+    else if (key == GLFW_KEY_J && action == GLFW_PRESS)
+    {
+        highlight = !highlight;
     }
 }
 
@@ -174,6 +232,31 @@ void AddMeshCube(pxr::UsdStageRefPtr i_stage, pxr::SdfPath& i_path, pxr::GfVec3d
     cubeMesh.AddTranslateOp().Set(i_pos);
 }
 
+void AddAreaLight(pxr::UsdStageRefPtr i_stage, pxr::GfMatrix4d& i_matrix)
+{
+    int i = 1;
+    while (i_stage->GetPrimAtPath(pxr::SdfPath("/arealight" + pxr::TfIntToString(i))))
+        i++;
+    pxr::UsdLuxRectLight& light = pxr::UsdLuxRectLight::Define(i_stage, pxr::SdfPath("/arealight" + pxr::TfIntToString(i)));
+    light.CreateExposureAttr().Set(2.0f);
+    light.CreateIntensityAttr().Set(2.0f);
+    light.CreateWidthAttr().Set(50.0f);
+    light.CreateHeightAttr().Set(50.0f);
+    auto& xformOp = light.AddXformOp(pxr::UsdGeomXformOp::TypeTransform);
+    xformOp.Set(i_matrix.GetInverse());
+
+    //CHAOS_SCENE_INFO("Light '" << pxr::SdfPath("/arealight" + pxr::TfIntToString(i)).GetString() << "' created");
+}
+
+void AddDomeLight(pxr::UsdStageRefPtr i_stage)
+{
+    int i = 1;
+    while (i_stage->GetPrimAtPath(pxr::SdfPath("/ibl" + pxr::TfIntToString(i))))
+        i++;
+    pxr::UsdLuxDomeLight& ibl = pxr::UsdLuxDomeLight::Define(i_stage, pxr::SdfPath("/ibl" + pxr::TfIntToString(i)));
+    ibl.CreateTextureFileAttr().Set(pxr::SdfAssetPath("./meadow_2_2k.exr"));
+}
+
 int main(int argc, char** argv)
 {
 	if (!glfwInit())
@@ -199,7 +282,7 @@ int main(int argc, char** argv)
     std::unique_ptr<class pxr::UsdImagingGLEngine> engine;
     pxr::GfCamera camera;
     pxr::GfMatrix4d cameraTransform;
-    pxr::GfVec3d cameraPivot(0,0,0);
+    pxr::GfVec3d cameraPivot(0,eyesHeight,0);
 
     pxr::GfMatrix4d viewMatrix;
     pxr::GfMatrix4d projectionMatrix;
@@ -230,12 +313,6 @@ int main(int argc, char** argv)
 #else
     auto renderDelegates = engine->GetRendererPlugins();
 #endif
-    for (size_t i = 0; i < renderDelegates.size(); ++i)
-    {
-        std::cout << "[" << (i) << "] "
-            << engine->GetRendererDisplayName(renderDelegates[i])
-            << " (" << renderDelegates[i] << ")" << std::endl;
-    }
     bool enabled = engine->SetRendererPlugin(renderDelegates[0]);
 
     int frame = 0;
@@ -259,6 +336,8 @@ int main(int argc, char** argv)
         }
     }
 
+    pxr::SdfPath selectedPrimPath;
+
     while (!glfwWindowShouldClose(window))
     {
         if(animate)
@@ -268,68 +347,131 @@ int main(int argc, char** argv)
 
         glfwPollEvents();
 
+        bool delegateSelectionMode = false;
+        bool primLocked = false;
+
         if (glfwJoystickIsGamepad(GLFW_JOYSTICK_1))
         {
             GLFWgamepadstate state;
             if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
             {
-                float distanceMultiplier = 1.0f + lookAtDistance/100.0f;
-
                 pxr::GfVec2f stickLeft = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
                 pxr::GfVec2f stickRight = pxr::GfVec2f(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
-
-                if ((joystickZeroLeft - stickLeft).GetLength() > 0.08)
-                {
-                    pxr::GfVec3d camDir = cameraTransform.ExtractTranslation() - cameraPivot;
-                    camDir[1] = 0.0;
-                    camDir.Normalize();
-                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[1] * camDir[0] * distanceMultiplier, 0.0, cameraPivot[2] + stickLeft[1] * camDir[2] * distanceMultiplier);
-                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[0] * camDir[2] * distanceMultiplier, 0.0, cameraPivot[2] + stickLeft[0] * (-camDir[0]) * distanceMultiplier);
-                }
-                if ((joystickZeroRight - stickRight).GetLength() > 0.08)
-                {
-                    pitch += stickRight[0];
-                    yaw += stickRight[1];
-                }
-
-                if (abs(joystickTriggerLeft - state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]) > 0.05)
-                    lookAtDistance -= (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] + 1.0) * distanceMultiplier;
-                if (abs(joystickTriggerRight - state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]) > 0.05)
-                    lookAtDistance += (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] + 1.0) * distanceMultiplier;
 
 // marco to check if a gamepad button is pressed
 #define GAMEPAD_BUTTON_PRESSED(btn) state.buttons[btn] == GLFW_PRESS
 // macro to check if a gamepad button has been pressed once
-#define GAMEPAD_BUTTON_PRESSED_ONCE(btn) state.buttons[btn] == GLFW_PRESS && recentButton != btn
+#define GAMEPAD_BUTTON_ONCE(btn) state.buttons[btn] == GLFW_PRESS && recentButton != btn
 
-                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_A))
-                    newDelegate = 0;
-                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_B))
-                    newDelegate = 1;
-                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_X))
-                    newDelegate = 2;
+                if (GAMEPAD_BUTTON_ONCE(GLFW_GAMEPAD_BUTTON_A))
+                {
+                    //AddMeshCube(stage, pxr::SdfPath("/myCubeMesh_" + std::to_string(totalCubes)), cameraPivot);
+                    //totalCubes++;
+                    AddAreaLight(stage, viewMatrix);
+                }
+                if (GAMEPAD_BUTTON_ONCE(GLFW_GAMEPAD_BUTTON_B))
+                {
+                    AddDomeLight(stage);
+                }
+                if (GAMEPAD_BUTTON_PRESSED(GLFW_GAMEPAD_BUTTON_X))
+                {
+                    primLocked = true;
+                }
+                if (GAMEPAD_BUTTON_PRESSED(GLFW_GAMEPAD_BUTTON_Y))
+                {
+                    delegateSelectionMode = true;
+                }
                 if (GAMEPAD_BUTTON_PRESSED(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER))
                 {
-                    AddMeshCube(stage, pxr::SdfPath("/myCubeMesh_" + std::to_string(totalCubes)), cameraPivot);
-                    totalCubes++;
+                    eyesHeight += heightMultiplier;
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0], eyesHeight, cameraPivot[2]);
                 }
-                if (GAMEPAD_BUTTON_PRESSED_ONCE(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER))
+                if (GAMEPAD_BUTTON_PRESSED(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER))
                 {
-                    pxr::UsdLuxDomeLight& ibl = pxr::UsdLuxDomeLight::Define(stage, pxr::SdfPath("/myIbl"));
-                    ibl.CreateTextureFileAttr().Set(pxr::SdfAssetPath("./meadow_2_2k.exr"));
+                    eyesHeight -= heightMultiplier;
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0], eyesHeight, cameraPivot[2]);
                 }
+                if (GAMEPAD_BUTTON_ONCE(GLFW_GAMEPAD_BUTTON_DPAD_UP))
+                {
+                    if(delegateSelectionMode)
+                        newDelegate = std::max(0, newDelegate - 1);
+                }
+                if (GAMEPAD_BUTTON_ONCE(GLFW_GAMEPAD_BUTTON_DPAD_DOWN))
+                {
+                    if(delegateSelectionMode)
+                        newDelegate++;
+                }
+
+                if (GAMEPAD_BUTTON_PRESSED(GLFW_GAMEPAD_BUTTON_DPAD_LEFT))
+                {
+                    focalLength -= 0.2f;
+                }
+                if (GAMEPAD_BUTTON_PRESSED(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT))
+                {
+                    focalLength += 0.2f;
+                }
+
                 // set recent button
                 for (int bi = 0; bi < 15; ++bi)
                 {
                     recentButton = GLFW_GAMEPAD_BUTTON_LAST;
-                    if (state.buttons[bi] == GLFW_PRESS)
+                    if (bi != GLFW_GAMEPAD_BUTTON_Y && state.buttons[bi] == GLFW_PRESS )
                     {
                         recentButton = bi;
                         break;
                     }
                 }
 #undef GAMEPAD_BUTTON_PRESSED
-#undef GAMEPAD_BUTTON_PRESSED_ONCE
+#undef GAMEPAD_BUTTON_ONCE
+
+                if ((joystickZeroLeft - stickLeft).GetLength() > 0.08)
+                {
+                    pxr::GfVec3d camDir = cameraTransform.ExtractTranslation() - cameraPivot;
+                    camDir[1] = 0.0;
+                    camDir.Normalize();
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[1] * camDir[0] * positionMultiplier, eyesHeight, cameraPivot[2] + stickLeft[1] * camDir[2] * positionMultiplier);
+                    cameraPivot = pxr::GfVec3d(cameraPivot[0] + stickLeft[0] * camDir[2] * positionMultiplier, eyesHeight, cameraPivot[2] + stickLeft[0] * (-camDir[0]) * positionMultiplier);
+
+                    if (primLocked && !selectedPrimPath.IsEmpty())
+                    {
+                        pxr::UsdPrim& prim = stage->GetPrimAtPath(selectedPrimPath);
+                        pxr::GfVec3d translate;
+                        pxr::GfVec3f rotate;
+                        pxr::GfVec3f scale;
+                        pxr::GfVec3f pivot;
+                        pxr::UsdGeomXformCommonAPI::RotationOrder rotOrder;
+                        pxr::UsdGeomXformCommonAPI(prim).GetXformVectors(&translate, &rotate, &scale, &pivot, &rotOrder, pxr::UsdTimeCode::Default());
+
+                        translate[0] += stickLeft[1] * camDir[0] * positionMultiplier + stickLeft[0] * camDir[2] * positionMultiplier;
+                        translate[1] += 0.0;
+                        translate[2] += stickLeft[1] * camDir[2] * positionMultiplier + stickLeft[0] * (-camDir[0]) * positionMultiplier;
+
+                        // pxr::UsdGeomImageable(prim).ComputeLocalToWorldTransform(0);
+                        auto& sourcePrim = pxr::UsdGeomXform(prim);
+                        sourcePrim.ClearXformOpOrder();
+                        auto& transformOp = sourcePrim.AddTransformOp();
+                        auto m = pxr::GfMatrix4d().SetIdentity();
+                        m *= pxr::GfMatrix4d().SetScale(scale);
+                        m *= pxr::GfMatrix4d().SetRotate(pxr::GfRotation(pxr::GfVec3d(1, 0, 0), rotate[0]));
+                        m *= pxr::GfMatrix4d().SetRotate(pxr::GfRotation(pxr::GfVec3d(0, 1, 0), rotate[1]));
+                        m *= pxr::GfMatrix4d().SetRotate(pxr::GfRotation(pxr::GfVec3d(0, 0, 1), rotate[2]));
+                        m *= pxr::GfMatrix4d().SetTranslate(translate);
+                        transformOp.Set(m);
+
+                    }
+                }
+                if ((joystickZeroRight - stickRight).GetLength() > 0.08)
+                {
+                    pitch += stickRight[0] * rotationMultiplier;
+                    yaw += stickRight[1] * rotationMultiplier;
+                }
+
+                if (abs(joystickTriggerLeft - state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]) > 0.05)
+                    lookAtDistance -= (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] + 1.0) * distanceMultiplier;
+                if (abs(joystickTriggerRight - state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]) > 0.05)
+                    lookAtDistance += (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] + 1.0) * distanceMultiplier;
+                lookAtDistance = std::max(0.1, lookAtDistance);
+
 
             }
         }
@@ -345,7 +487,7 @@ int main(int argc, char** argv)
                 stage->GetPseudoRoot().GetPath(), excludedPaths));
         }
 
-        if (newDelegate != currentDelegate)
+        if (!delegateSelectionMode && newDelegate != currentDelegate)
         {
             currentDelegate = newDelegate;
             engine->SetRendererPlugin(renderDelegates[currentDelegate]);
@@ -376,7 +518,7 @@ int main(int argc, char** argv)
 
         camera.SetTransform(cameraTransform);
         frustum = camera.GetFrustum();
-        double fovy = 18.0;
+        double fovy = focalLength;
         double znear = 0.5;
         double zfar = 100000.0;
         const double aspectRatio = double(display_w) / double(display_h);
@@ -420,7 +562,7 @@ int main(int argc, char** argv)
             renderParams.showRender = false;
             renderParams.showGuides = false;
             renderParams.forceRefresh = false;
-            renderParams.highlight = true;
+            renderParams.highlight = highlight;
             renderParams.enableUsdDrawModes = true;
             renderParams.drawMode = pxr::UsdImagingGLDrawMode::DRAW_SHADED_SMOOTH;
             renderParams.gammaCorrectColors = true;
@@ -442,34 +584,38 @@ int main(int argc, char** argv)
         auto pickView = pickFrustum.ComputeViewMatrix();
         auto pickProj = pickFrustum.ComputeProjectionMatrix();
 
-        pxr::SdfPath outHitPrimPath;
         pxr::GfVec3d selectionHitPoint;
         pxr::GfVec3d selectionHitNormal;
 
-        if (engine->TestIntersection(
-            pickView,
-            pickProj,
-            stage->GetPseudoRoot(),
-            renderParams,
-            &selectionHitPoint,
-            &selectionHitNormal,
-            &outHitPrimPath))
+        if (!primLocked)
         {
-            engine->SetSelected({ outHitPrimPath });
-        }
-        else
-        {
-            engine->ClearSelected();
+            selectedPrimPath = pxr::SdfPath();
+            if (highlight && engine->TestIntersection(
+                pickView,
+                pickProj,
+                stage->GetPseudoRoot(),
+                renderParams,
+                &selectionHitPoint,
+                &selectionHitNormal,
+                &selectedPrimPath))
+            {
+                engine->SetSelected({ selectedPrimPath });
+            }
+            else
+            {
+                engine->ClearSelected();
+            }
         }
 
-        // draw cross
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        // HUD
         glDisable(GL_LIGHTING);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glEnable(GL_LINE_SMOOTH);
         glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glLineWidth(2.0f);
         glPushMatrix();
         {
             glViewport(0, 0, display_w, display_h);
@@ -477,6 +623,9 @@ int main(int argc, char** argv)
             glLoadIdentity();
             glMatrixMode(GL_MODELVIEW);
             glLoadIdentity();
+            
+            // draw white cross
+            glLineWidth(2.0f);
             glBegin(GL_LINES);
             glColor3f(1.0f, 1.0f, 1.0f);
             glVertex3f(-0.1, 0.0, 0.0);
@@ -484,7 +633,44 @@ int main(int argc, char** argv)
             glVertex3f(0.0, -0.1, 0.0);
             glVertex3f(0.0, 0.1, 0.0);
             glEnd();
+            
+            // draw text
+            pfResetTop();
+            pfPixelSize(2.0f);
+            pfDisplaySize(display_w, display_h);
 
+            // show help
+            if (showHelp)
+            {
+                pfText(std::string("            fov = ") + std::to_string(focalLength), false);
+                pfText(std::string("eyes-height(cm) = ") + std::to_string(eyesHeight), false);
+                pfText(std::string("camera-distance = ") + std::to_string(lookAtDistance), false);
+                pfText(std::string(""), false);
+                pfText(std::string("Multipliers:"), false);
+                pfText(std::string("  position = ") + std::to_string(positionMultiplier), false);
+                pfText(std::string("  rotation = ") + std::to_string(rotationMultiplier), false);
+                pfText(std::string("    height = ") + std::to_string(heightMultiplier), false);
+                pfText(std::string("  distance = ") + std::to_string(distanceMultiplier), false);
+                pfText(std::string(""), false);
+            }
+            // show delegates only if in selection mode
+            if (delegateSelectionMode)
+            {
+                pfText(std::string("Available delegates:"), false);
+                for (size_t i = 0; i < renderDelegates.size(); ++i)
+                {
+                    std::string currline = "[" + std::to_string(i) + "] "
+                        + engine->GetRendererDisplayName(renderDelegates[i])
+                        + " (" + renderDelegates[i].GetString() + ")";
+                    pfText(currline, newDelegate == i);
+                }
+            }
+            else
+            {
+                std::string currline = engine->GetRendererDisplayName(renderDelegates[currentDelegate])
+                    + " (" + renderDelegates[currentDelegate].GetString() + ")";
+                pfText(currline, false);
+            }
         }
         glPopMatrix();
 

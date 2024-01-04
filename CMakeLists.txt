@@ -49,13 +49,13 @@ if( _target_name MATCHES "houdini" )
 
 elseif( _target_name MATCHES "usd" )
     list(GET _t_config 1 USD_VERSION )
+    if(_t_config_length EQUAL 3)
+        set( USD_EMBEDDED TRUE )
+    endif()
     set(USD_ROOT "C:\\dev\\usd-${USD_VERSION}" )
     set(USD_ROOT_FOR_BATCH ${USD_ROOT})
     if( USD_EMBEDDED )
-        set(USD_ROOT_FOR_BATCH .\\usd-${USD_VERSION})
-    endif()
-    if(_t_config_length EQUAL 3)
-        set( USD_EMBEDDED TRUE )
+        set(USD_ROOT_FOR_BATCH "%CURRENT_FOLDER%usd-${USD_VERSION}")
     endif()
 
 else()
@@ -67,11 +67,10 @@ include(cmake/FindUsd.cmake)
 include(cmake/FindTBB.cmake)
 #find_package(TBB REQUIRED)
 
-configure_file( run_simpleusdview.bat run_simpleusdview.bat )
-
 add_executable( 
     ${TARGET}
     main.cpp
+    font.h 
 )
 
 target_compile_options(
@@ -111,5 +110,10 @@ if( USD_EMBEDDED )
 endif()
 
 install(TARGETS ${TARGET} RUNTIME DESTINATION bin)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/run_simpleusdview.bat DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/meadow_2_2k.exr DESTINATION bin)
+install(FILES ${CMAKE_SOURCE_DIR}/plugInfo.json DESTINATION bin/usd-extra/plugin/usd)
+
+# Install from binary folder so that the bat file has all env-vars replaced
+# after configure_file call
+configure_file( run_simpleusdview.bat run_simpleusdview.bat )
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/run_simpleusdview.bat DESTINATION bin)
